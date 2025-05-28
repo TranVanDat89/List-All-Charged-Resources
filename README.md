@@ -57,9 +57,7 @@ mkdir terraform
 
 Copy the following files to your project:
 - `main.tf` → `terraform/main.tf`
-- `versions.tf` → `terraform/versions.tf`
-- `lambda_function.py` → `terraform/lambda_function.py`
-- `deploy.sh` → `scripts/deploy.sh`
+- `lambda_function.py` → `sourrces/lambda_function.py`
 
 ### 3. Configure Variables
 
@@ -73,7 +71,7 @@ vim terraform/terraform.tfvars
 
 Example `terraform.tfvars`:
 ```hcl
-aws_region = "ap-southeast-1"
+aws_region = "ap-southeast-2"
 sender_email = "reports@yourcompany.com"
 recipient_emails = [
   "admin@yourcompany.com",
@@ -88,10 +86,10 @@ schedule_enabled = true
 
 ```bash
 # Make script executable
-chmod +x scripts/deploy.sh
+chmod +x deploy.sh
 
 # Run deployment
-./scripts/deploy.sh
+bash deploy.sh
 ```
 
 ## 📧 Email Report Features
@@ -141,14 +139,14 @@ schedule_expression = "cron(0 2,11 * * ? *)"
 |----------|-------------|---------|
 | `SENDER_EMAIL` | SES verified sender email | `reports@company.com` |
 | `RECIPIENT_EMAILS` | Comma-separated recipient list | `admin@company.com,finance@company.com` |
-| `AWS_REGION_SES` | SES region | `ap-southeast-1` |
+| `AWS_REGION_SES` | SES region | `ap-southeast-2` |
 | `ENVIRONMENT` | Environment name | `prod` |
 
 ### Terraform Variables
 
 | Variable | Type | Description | Default |
 |----------|------|-------------|---------|
-| `aws_region` | string | AWS region for deployment | `ap-southeast-1` |
+| `aws_region` | string | AWS region for deployment | `ap-southeast-2` |
 | `sender_email` | string | SES sender email | Required |
 | `recipient_emails` | list(string) | List of recipient emails | Required |
 | `project_name` | string | Project name for resources | `aws-cost-reporter` |
