@@ -1,0 +1,27 @@
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore zip files (e.g., Lambda package)
+*.zip
+
+# Ignore Terraform state files
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/tfplan
+
+# Ignore tfvars if it contains secrets
+terraform/terraform.tfvars
+
+# Shell script outputs or editor swap files
+*.swp
+*.swo
+*.bak
+*.log
+
+# If using Visual Studio Code
+.vscode/
