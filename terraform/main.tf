@@ -168,7 +168,7 @@ resource "aws_cloudwatch_event_rule" "daily_schedule" {
   count               = var.schedule_enabled ? 1 : 0
   name                = "${var.project_name}-daily-schedule-${var.environment}"
   description         = "Trigger AWS Cost Reporter daily at 9:15 AM Vietnamese time"
-  schedule_expression = "cron(30 1 * * ? *)" # 2:15 AM UTC = 9:15 AM GMT+7
+  schedule_expression = "cron(15 2 * * ? *)" # 2:15 AM UTC = 9:15 AM GMT+7
 
   tags = local.common_tags
 }
