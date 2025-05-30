@@ -1,5 +1,5 @@
 import json
-import boto3
+import boto3 # type: ignore
 from datetime import datetime, timedelta
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -233,14 +233,14 @@ def get_detailed_cost_explorer_data():
             ]
         )
         
-        # Get detailed breakdown by service and usage type
+        # Get detailed breakdown by service and usage type WITH USAGE QUANTITY
         detailed_response = ce_client.get_cost_and_usage(
             TimePeriod={
                 'Start': start_date.strftime('%Y-%m-%d'),
                 'End': end_date.strftime('%Y-%m-%d')
             },
             Granularity='MONTHLY',
-            Metrics=['BlendedCost'],
+            Metrics=['BlendedCost', 'UsageQuantity'], # Add UsageQuantity metric
             GroupBy=[
                 {
                     'Type': 'DIMENSION',
@@ -272,11 +272,17 @@ def get_detailed_cost_explorer_data():
                 service = group['Keys'][0]
                 usage_type = group['Keys'][1]
                 cost = float(group['Metrics']['BlendedCost']['Amount'])
+                usage_quantity = float(group['Metrics']['UsageQuantity']['Amount'])
                 
                 if cost > 0:
                     # Clean up usage type names for better readability
                     clean_usage_type = clean_usage_type_name(usage_type, service)
-                    detailed_breakdown[service][clean_usage_type] = cost
+                    detailed_breakdown[service][clean_usage_type] = {
+                        'cost': cost,
+                        'usage_quantity': usage_quantity,
+                        'usage_type_raw': usage_type,
+                        'rate_per_unit': cost / usage_quantity if usage_quantity > 0 else 0
+                    }
         
         return {
             'total_cost': round(total_cost, 2),
@@ -287,6 +293,66 @@ def get_detailed_cost_explorer_data():
     except Exception as e:
         logger.error(f"Error getting cost explorer data: {str(e)}")
         return {'total_cost': 0.0, 'by_service': {}, 'detailed_breakdown': {}}
+
+def get_usage_unit_for_type(usage_type, service):
+    """
+    Determine the appropriate unit for usage quantity based on usage type and service
+    """
+    usage_type_lower = usage_type.lower()
+    
+    # NAT Gateway
+    if 'natgateway' in usage_type_lower:
+        if 'hour' in usage_type_lower:
+            return 'Hrs'
+        elif 'byte' in usage_type_lower or 'gb' in usage_type_lower:
+            return 'GB'
+    
+    # EC2 Instances
+    elif 'boxusage' in usage_type_lower or 'instanceusage' in usage_type_lower:
+        return 'Hrs'
+    
+    # EBS
+    elif 'volumeusage' in usage_type_lower:
+        return 'GB-Mo'
+    elif 'snapshotusage' in usage_type_lower:
+        return 'GB-Mo'
+    elif 'iops' in usage_type_lower:
+        return 'IOPS-Mo'
+    
+    # RDS
+    elif 'db' in usage_type_lower and 'instanceusage' in usage_type_lower:
+        return 'Hrs'
+    elif 'rds' in usage_type_lower and 'storageusage' in usage_type_lower:
+        return 'GB-Mo'
+    
+    # S3
+    elif 'storageusage' in usage_type_lower and 's3' in service.lower():
+        return 'GB-Mo'
+    elif 'request' in usage_type_lower and 's3' in service.lower():
+        return 'Requests'
+    
+    # Lambda
+    elif 'request' in usage_type_lower and 'lambda' in service.lower():
+        return 'Requests'
+    elif 'duration' in usage_type_lower and 'lambda' in service.lower():
+        return 'GB-Seconds'
+    
+    # Data Transfer
+    elif 'datatransfer' in usage_type_lower:
+        return 'GB'
+    
+    # Load Balancer
+    elif 'loadbalancer' in usage_type_lower:
+        return 'Hrs'
+    
+    # CloudFront
+    elif 'datatransfer' in usage_type_lower and 'cloudfront' in service.lower():
+        return 'GB'
+    elif 'request' in usage_type_lower and 'cloudfront' in service.lower():
+        return 'Requests'
+    
+    # Default
+    return 'Units'
 
 def clean_usage_type_name(usage_type, service):
     """
@@ -566,6 +632,7 @@ def generate_html_email_body(charged_resources):
             <tr>
                 <th>Service / Resource Type</th>
                 <th>Cost (Last 30 days)</th>
+                <th>Usage Details</th>
                 <th>Percentage of Total</th>
             </tr>
         """
@@ -579,21 +646,43 @@ def generate_html_email_body(charged_resources):
             <tr class="service-header">
                 <td><strong>{service}</strong></td>
                 <td class="{service_cost_class}"><strong>${service_cost:.2f}</strong></td>
+                <td><strong>Service Total</strong></td>
                 <td><strong>{service_percentage:.1f}%</strong></td>
             </tr>
             """
             
-            # Add detailed breakdown for this service
+             # Add detailed breakdown for this service WITH USAGE DATA
             if service in detailed_breakdown:
-                usage_types = sorted(detailed_breakdown[service].items(), key=lambda x: x[1], reverse=True)
-                for usage_type, usage_cost in usage_types:
+                usage_items = sorted(detailed_breakdown[service].items(), key=lambda x: x[1]['cost'], reverse=True)
+                for usage_type, usage_data in usage_items:
+                    usage_cost = usage_data['cost']
                     if usage_cost > 0.01:  # Only show costs > $0.01
                         usage_percentage = (usage_cost / service_cost * 100) if service_cost > 0 else 0
                         usage_cost_class = 'cost-high' if usage_cost > 20 else 'cost-medium' if usage_cost > 2 else 'cost-low'
+                        
+                        # Format usage details
+                        usage_quantity = usage_data['usage_quantity']
+                        rate_per_unit = usage_data['rate_per_unit']
+                        usage_type_raw = usage_data['usage_type_raw']
+                        unit = get_usage_unit_for_type(usage_type_raw, service)
+                        
+                        # Create usage details string
+                        usage_details = ""
+                        if usage_quantity > 0 and rate_per_unit > 0:
+                            if usage_quantity >= 1000:
+                                formatted_quantity = f"{usage_quantity:,.0f}"
+                            elif usage_quantity >= 1:
+                                formatted_quantity = f"{usage_quantity:.1f}"
+                            else:
+                                formatted_quantity = f"{usage_quantity:.3f}"
+                            
+                            usage_details = f"${rate_per_unit:.3f} per {unit} × {formatted_quantity} {unit}"
+                        
                         html += f"""
                         <tr class="usage-type-row">
                             <td class="indent">├─ {usage_type}</td>
                             <td class="{usage_cost_class}">${usage_cost:.2f}</td>
+                            <td class="usage-details">{usage_details}</td>
                             <td>{usage_percentage:.1f}% of service</td>
                         </tr>
                         """
@@ -688,8 +777,9 @@ DETAILED COST BREAKDOWN BY SERVICE & RESOURCE TYPE
             text += "-" * 50 + "\n"
             
             if service in detailed_breakdown:
-                usage_types = sorted(detailed_breakdown[service].items(), key=lambda x: x[1], reverse=True)
-                for usage_type, usage_cost in usage_types:
+                usage_types = sorted(detailed_breakdown[service].items(), key=lambda x: x[1]['cost'], reverse=True)
+                for usage_type, usage_data in usage_types:
+                    usage_cost = usage_data['cost']
                     if usage_cost > 0.01:
                         usage_percentage = (usage_cost / service_cost * 100) if service_cost > 0 else 0
                         text += f"  ├─ {usage_type}: ${usage_cost:.2f} ({usage_percentage:.1f}% of service)\n"

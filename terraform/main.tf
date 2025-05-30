@@ -162,13 +162,13 @@ resource "aws_lambda_function" "cost_reporter" {
   tags = local.common_tags
 }
 
-# EventBridge Rule for scheduling (9 AM Vietnamese time = 2 AM UTC)
+# EventBridge Rule for scheduling (8 AM Vietnamese time = 1 AM UTC)
 # cron(Minutes Hours Day-of-month Month Day-of-week Year)
 resource "aws_cloudwatch_event_rule" "daily_schedule" {
   count               = var.schedule_enabled ? 1 : 0
   name                = "${var.project_name}-daily-schedule-${var.environment}"
   description         = "Trigger AWS Cost Reporter daily at 9:15 AM Vietnamese time"
-  schedule_expression = "cron(15 2 * * ? *)" # 2:15 AM UTC = 9:15 AM GMT+7
+  schedule_expression = "cron(30 1 * * ? *)" # 1:30 AM UTC = 8:30 AM GMT+7
 
   tags = local.common_tags
 }
