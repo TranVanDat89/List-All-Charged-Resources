@@ -208,14 +208,15 @@ def get_all_charged_resources(charged_services):
 
 def get_detailed_cost_explorer_data():
     """
-    Get detailed cost data from AWS Cost Explorer for the last 30 days with usage type breakdown
+    Get detailed cost data from AWS Cost Explorer for the current month only
     """
     try:
         ce_client = boto3.client('ce')
         
         # Get date range (last 30 days)
-        end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=30)
+        today = datetime.now().date()
+        start_date = today.replace(day=1)  # First day of current month
+        end_date = today
         
         # Get cost by service first
         service_response = ce_client.get_cost_and_usage(
@@ -611,12 +612,12 @@ def generate_html_email_body(charged_resources):
         <div class="header">
             <h1>💰 AWS Detailed Cost & Resource Report</h1>
             <p><strong>Generated:</strong> {timestamp}</p>
-            <p><strong>Scan Period:</strong> Last 30 days</p>
+            <p><strong>Scan Period:</strong> Current month</p>
         </div>
         
         <div class="cost-summary">
             <h2>💰 Total Cost Summary</h2>
-            <p><strong>Total Cost (Last 30 days):</strong> 
+            <p><strong>Total Cost (Current month):</strong> 
                 <span class="{'cost-high' if total_cost > 100 else 'cost-medium' if total_cost > 10 else 'cost-low'}">
                     ${total_cost:.2f}
                 </span>
@@ -631,7 +632,7 @@ def generate_html_email_body(charged_resources):
         <table>
             <tr>
                 <th>Service / Resource Type</th>
-                <th>Cost (Last 30 days)</th>
+                <th>Cost (Current month)</th>
                 <th>Usage Details</th>
                 <th>Percentage of Total</th>
             </tr>
@@ -762,7 +763,7 @@ Generated: {timestamp}
 Scan Period: Last 30 days
 
 TOTAL COST SUMMARY
-Total Cost (Last 30 days): ${total_cost:.2f}
+Total Cost (Current month): ${total_cost:.2f}
 
 DETAILED COST BREAKDOWN BY SERVICE & RESOURCE TYPE
 {'=' * 60}
